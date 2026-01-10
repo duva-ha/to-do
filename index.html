@@ -3,17 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Timeline Text Pro</title>
+    <title>My Cloud Timeline</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
-        .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .sticky-date { position: sticky; top: 64px; z-index: 10; background: rgba(243, 244, 246, 0.9); backdrop-filter: blur(8px); }
+        @import url('https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;600;800&display=swap');
+        body { font-family: 'Lexend', sans-serif; background-color: #f9fafb; }
+        .sticky-date { position: sticky; top: 60px; z-index: 10; background: rgba(249, 250, 251, 0.9); backdrop-filter: blur(10px); }
     </style>
 </head>
 <body>
@@ -22,124 +22,128 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
 
-        // 1. Khởi tạo Database (IndexedDB)
-        const db = new Dexie("TimelineNotesDB");
-        db.version(1).stores({
-            notes: '++id, content, date, timestamp' // Index các trường quan trọng
-        });
+        // --- 1. CẤU HÌNH FIREBASE ---
+        // DÁN TOÀN BỘ ĐOẠN "const firebaseConfig = { ... };" CỦA BẠN VÀO ĐÂY
+          const firebaseConfig = {
+            apiKey: "AIzaSyAV-XVaOyUiq1c-29VTaWjLKcEXrssnnTE",
+            authDomain: "qlhs10a7.firebaseapp.com",
+            projectId: "qlhs10a7",
+            storageBucket: "qlhs10a7.firebasestorage.app",
+            messagingSenderId: "584229565603",
+            appId: "1:584229565603:web:d47a10f0a512a1a309bb16",
+            measurementId: "G-8E5E1933DE"
+        }; 
+        // Khởi tạo Firebase
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.firestore();
 
         function App() {
             const [notes, setNotes] = useState([]);
             const [text, setText] = useState("");
-            const [searchQuery, setSearchQuery] = useState("");
+            const [loading, setLoading] = useState(true);
 
-            // 2. Load dữ liệu từ Database khi mở app
+            // --- 2. LẤY DỮ LIỆU TỰ ĐỘNG CẬP NHẬT ---
             useEffect(() => {
-                loadNotes();
+                const unsubscribe = db.collection("notes")
+                    .orderBy("timestamp", "desc")
+                    .onSnapshot((snapshot) => {
+                        const data = snapshot.docs.map(doc => ({
+                            id: doc.id,
+                            ...doc.data()
+                        }));
+                        setNotes(data);
+                        setLoading(false);
+                    }, (error) => {
+                        console.error("Lỗi Rules Firebase:", error);
+                        setLoading(false);
+                    });
+                return () => unsubscribe();
             }, []);
 
-            const loadNotes = async () => {
-                const allNotes = await db.notes.orderBy('timestamp').reverse().toArray();
-                setNotes(allNotes);
-            };
-
-            // 3. Hàm thêm ghi chú
+            // --- 3. GỬI DỮ LIỆU LÊN ĐÁM MÂY ---
             const handleSubmit = async (e) => {
                 e.preventDefault();
                 if (!text.trim()) return;
 
                 const now = new Date();
-                const newNote = {
-                    content: text,
-                    date: now.toISOString().split('T')[0],
-                    time: now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
-                    timestamp: now.getTime()
-                };
-
-                await db.notes.add(newNote);
-                setText("");
-                loadNotes(); // Reload danh sách
+                try {
+                    await db.collection("notes").add({
+                        content: text,
+                        date: now.toISOString().split('T')[0],
+                        time: now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    setText("");
+                } catch (err) {
+                    alert("Lỗi: Hãy kiểm tra tab 'Quy tắc' trên Firebase đã để 'allow read, write: if true' chưa?");
+                }
             };
 
-            // 4. Logic tìm kiếm và Nhóm dữ liệu (Optimization)
-            const filteredNotes = useMemo(() => {
-                return notes.filter(n => n.content.toLowerCase().includes(searchQuery.toLowerCase()));
-            }, [notes, searchQuery]);
-
             const groupedNotes = useMemo(() => {
-                return filteredNotes.reduce((groups, note) => {
-                    const date = note.date;
-                    if (!groups[date]) groups[date] = [];
-                    groups[date].push(note);
+                return notes.reduce((groups, note) => {
+                    const dateStr = note.date || "Khác";
+                    if (!groups[dateStr]) groups[dateStr] = [];
+                    groups[dateStr].push(note);
                     return groups;
                 }, {});
-            }, [filteredNotes]);
+            }, [notes]);
+
+            if (loading) return <div className="flex h-screen items-center justify-center text-blue-600 font-bold">ĐANG KẾT NỐI CLOUD...</div>;
 
             return (
-                <div className="min-h-screen pb-32">
-                    {/* Header cố định */}
-                    <header className="sticky top-0 bg-white shadow-sm z-30 px-4 py-3">
-                        <div className="max-w-2xl mx-auto flex flex-col gap-3">
-                            <div className="flex justify-between items-center">
-                                <h1 className="text-xl font-bold text-blue-600">Timeline Notes</h1>
-                                <span className="text-xs bg-gray-100 px-2 py-1 rounded-full text-gray-500 font-medium">
-                                    {filteredNotes.length} bản ghi
-                                </span>
-                            </div>
-                            <input 
-                                type="text" 
-                                placeholder="Tìm kiếm trong dòng thời gian..."
-                                className="w-full bg-gray-100 border-none rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                            />
+                <div className="max-w-xl mx-auto pb-32">
+                    <header className="sticky top-0 bg-white/70 backdrop-blur-md px-6 py-4 flex justify-between items-center z-30 border-b border-gray-100">
+                        <h1 className="text-xl font-extrabold text-gray-900 tracking-tighter">TIMELINE</h1>
+                        <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-xs font-bold">
+                            {notes.length}
                         </div>
                     </header>
 
-                    {/* Danh sách Dòng thời gian */}
-                    <main className="max-w-2xl mx-auto px-4 mt-6">
+                    <main className="px-4 mt-4">
                         {Object.keys(groupedNotes).length === 0 && (
-                            <div className="text-center py-20 text-gray-400">Chưa có ghi chú nào. Hãy bắt đầu viết!</div>
+                            <div className="text-center py-20 text-gray-300 italic">Chưa có dữ liệu trên đám mây...</div>
                         )}
 
                         {Object.keys(groupedNotes).map(date => (
-                            <section key={date} className="mb-8">
-                                <h2 className="sticky-date py-2 text-sm font-bold text-gray-500 uppercase tracking-tighter">
-                                    {new Date(date).toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}
+                            <div key={date} className="mb-10">
+                                <h2 className="sticky-date py-3 text-sm font-black text-gray-400 uppercase tracking-widest">
+                                    {new Date(date).toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit' })}
                                 </h2>
-                                <div className="space-y-3 mt-2">
+                                <div className="space-y-4 mt-2">
                                     {groupedNotes[date].map(note => (
-                                        <div key={note.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 group hover:border-blue-300 transition-all">
-                                            <div className="flex justify-between items-start mb-1">
-                                                <span className="text-[10px] font-bold text-blue-400 uppercase">{note.time}</span>
+                                        <div key={note.id} className="bg-white p-5 rounded-3xl shadow-sm border border-gray-50 hover:shadow-md transition-all group">
+                                            <div className="flex justify-between items-center mb-3">
+                                                <span className="text-[10px] font-bold text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">{note.time}</span>
                                                 <button 
-                                                    onClick={async () => { if(confirm('Xóa?')) { await db.notes.delete(note.id); loadNotes(); } }}
-                                                    className="opacity-0 group-hover:opacity-100 text-red-400 text-xs transition-opacity"
+                                                    onClick={() => { if(confirm('Xóa vĩnh viễn?')) db.collection("notes").doc(note.id).delete() }}
+                                                    className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 text-xs transition-all"
                                                 >
                                                     Xóa
                                                 </button>
                                             </div>
-                                            <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{note.content}</p>
+                                            <p className="text-gray-700 leading-relaxed whitespace-pre-wrap font-light">{note.content}</p>
                                         </div>
                                     ))}
                                 </div>
-                            </section>
+                            </div>
                         ))}
                     </main>
 
-                    {/* Form nhập liệu chân trang */}
-                    <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-white via-white to-transparent pt-10 pb-6 px-4">
-                        <form onSubmit={handleSubmit} className="max-w-2xl mx-auto flex items-end gap-2 bg-white p-2 rounded-2xl shadow-2xl border border-gray-100">
+                    {/* Input Area */}
+                    <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-gray-50 via-gray-50 to-transparent">
+                        <form onSubmit={handleSubmit} className="max-w-xl mx-auto relative">
                             <textarea 
-                                rows="1"
                                 value={text}
                                 onChange={(e) => setText(e.target.value)}
-                                placeholder="Ghi chép nhanh..."
-                                className="flex-1 p-3 max-h-40 outline-none resize-none text-gray-700"
                                 onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(e); } }}
+                                placeholder="Ghi chép vào dòng thời gian..."
+                                className="w-full bg-white shadow-2xl rounded-3xl p-5 pr-16 outline-none border border-gray-100 focus:border-blue-300 transition-all resize-none"
+                                rows="1"
                             />
-                            <button className="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl transition-colors shadow-lg">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+                            <button className="absolute right-3 bottom-3 bg-blue-600 text-white w-10 h-10 rounded-2xl flex items-center justify-center hover:bg-blue-700 shadow-lg transition-all">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
                                     <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
                                 </svg>
                             </button>
