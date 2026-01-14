@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>To-do Timeline Pro</title>
+    <title>Timeline Pro - Fixed Quick View</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -19,9 +19,7 @@
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .animate-in { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .modal-overlay { background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px); transition: all 0.3s; }
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 10px; }
+        .modal-overlay { background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(8px); }
     </style>
 </head>
 <body>
@@ -79,7 +77,6 @@
                 return () => unsubscribe();
             }, [user]);
 
-            // Xử lý lọc dữ liệu thông minh
             const filteredNotes = useMemo(() => {
                 let result = notes;
                 if (searchTerm.trim()) {
@@ -107,7 +104,6 @@
                 if ((!text.trim() && !file) || !user) return;
                 setUploading(true);
                 let fileUrl = null, fileName = null, fileType = null;
-
                 try {
                     if (file) {
                         const base64 = await new Promise((resolve) => {
@@ -135,9 +131,16 @@
                 } catch (err) { alert("Lỗi gửi dữ liệu: " + err.message); } finally { setUploading(false); }
             };
 
+            // Hàm chuẩn hóa URL để ép hiển thị thay vì tải xuống
+            const getPreviewUrl = (url) => {
+                if (!url) return "";
+                // Chuyển đổi các dạng link Drive thành dạng preview
+                return url.replace(/export=download|export=view/g, 'preview');
+            };
+
             if (!user) return (
-                <div className="h-screen flex items-center justify-center bg-white">
-                    <button onClick={() => auth.signInWithPopup(provider)} className="px-8 py-4 bg-black text-white rounded-2xl font-semibold shadow-xl hover:scale-105 transition-all">Đăng nhập bằng Google</button>
+                <div className="h-screen flex items-center justify-center bg-white p-6">
+                    <button onClick={() => auth.signInWithPopup(provider)} className="px-8 py-4 bg-black text-white rounded-2xl font-semibold shadow-xl hover:scale-105 transition-all">Đăng nhập Timeline</button>
                 </div>
             );
 
@@ -146,22 +149,20 @@
                     <header className="flex items-center justify-between mb-8">
                         <div className="flex items-center gap-4">
                             <img src={user.photoURL} className="w-12 h-12 rounded-full border-2 border-white shadow-md" />
-                            <h1 className="font-extrabold text-xl">Timeline To-do</h1>
+                            <h1 className="font-extrabold text-xl tracking-tight">Timeline Cloud</h1>
                         </div>
                         <button onClick={() => auth.signOut()} className="text-[10px] font-bold text-gray-400 uppercase tracking-widest hover:text-red-500 transition-colors">Đăng xuất</button>
                     </header>
 
-                    {/* Thanh tìm kiếm */}
-                    <div className="mb-10 relative group">
+                    <div className="mb-10 relative">
                         <input 
                             type="text" 
-                            placeholder="Tìm kiếm nội dung, nhãn hoặc tệp tin..." 
+                            placeholder="Tìm kiếm thông minh..." 
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full bg-white border border-gray-100 rounded-[1.5rem] py-4 px-12 shadow-sm outline-none focus:border-blue-300 focus:ring-4 ring-blue-50 transition-all text-sm"
+                            className="w-full bg-white border border-gray-100 rounded-[1.5rem] py-4 px-12 shadow-sm outline-none focus:border-blue-300 transition-all text-sm"
                         />
                         <svg className="w-5 h-5 text-gray-300 absolute left-4 top-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                        {searchTerm && <button onClick={() => setSearchTerm("")} className="absolute right-4 top-4 text-gray-400">✕</button>}
                     </div>
 
                     <div className="space-y-12">
@@ -187,11 +188,11 @@
                                                         <div className="bg-white p-2 rounded-lg shadow-sm">
                                                             <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                                                         </div>
-                                                        <div className="flex-1 overflow-hidden pr-4">
+                                                        <div className="flex-1 overflow-hidden">
                                                             <p className="text-[11px] font-bold text-gray-600 truncate">{note.fileName}</p>
-                                                            <p className="text-[9px] text-gray-400 uppercase font-bold tracking-tighter">Nhấn để xem nhanh</p>
+                                                            <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">Click để xem nhanh nội dung</p>
                                                         </div>
-                                                        <a href={note.fileUrl} onClick={(e) => e.stopPropagation()} target="_blank" className="text-blue-600 p-2 hover:scale-110 transition-transform"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg></a>
+                                                        <a href={note.fileUrl.replace('preview', 'export=download')} onClick={(e) => e.stopPropagation()} target="_blank" className="text-blue-600 p-2 hover:bg-white rounded-full transition-all"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg></a>
                                                     </div>
                                                 )}
                                             </div>
@@ -202,23 +203,31 @@
                         ))}
                     </div>
 
-                    {/* MODAL QUICK VIEW */}
+                    {/* MODAL QUICK VIEW - SỬA LỖI TỰ ĐỘNG TẢI */}
                     {selectedFile && (
                         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 modal-overlay animate-in" onClick={() => setSelectedFile(null)}>
-                            <div className="bg-white w-full max-w-3xl rounded-[2.5rem] overflow-hidden shadow-2xl relative" onClick={e => e.stopPropagation()}>
+                            <div className="bg-white w-full max-w-4xl rounded-[2.5rem] overflow-hidden shadow-2xl relative" onClick={e => e.stopPropagation()}>
                                 <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-                                    <h3 className="font-bold text-sm truncate pr-8">{selectedFile.fileName}</h3>
+                                    <h3 className="font-bold text-sm truncate pr-8 text-gray-700">{selectedFile.fileName}</h3>
                                     <button onClick={() => setSelectedFile(null)} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-xl">✕</button>
                                 </div>
-                                <div className="w-full h-[70vh] bg-gray-50">
+                                <div className="w-full h-[75vh] bg-gray-100">
                                     {selectedFile.fileType?.startsWith('image/') ? (
-                                        <img src={selectedFile.fileUrl} className="w-full h-full object-contain p-4" />
+                                        <div className="w-full h-full flex items-center justify-center p-4">
+                                            <img src={getPreviewUrl(selectedFile.fileUrl)} className="max-w-full max-h-full object-contain shadow-lg rounded-lg" />
+                                        </div>
                                     ) : selectedFile.fileType === 'application/pdf' ? (
-                                        <iframe src={selectedFile.fileUrl.replace('export=view', 'preview')} className="w-full h-full" frameBorder="0"></iframe>
+                                        <iframe 
+                                            src={getPreviewUrl(selectedFile.fileUrl)} 
+                                            className="w-full h-full" 
+                                            frameBorder="0"
+                                            title="Quick View"
+                                        ></iframe>
                                     ) : (
-                                        <div className="h-full flex flex-col items-center justify-center text-gray-400 space-y-4">
-                                            <p className="text-sm font-medium">Định dạng file không hỗ trợ xem nhanh trực tiếp</p>
-                                            <a href={selectedFile.fileUrl} target="_blank" className="px-6 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold shadow-lg">Mở trong Google Drive</a>
+                                        <div className="h-full flex flex-col items-center justify-center text-gray-400 space-y-4 p-10 text-center">
+                                            <svg className="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                            <p className="text-sm font-medium">Trình duyệt không hỗ trợ xem nhanh loại file này.</p>
+                                            <a href={selectedFile.fileUrl.replace('preview', 'export=download')} target="_blank" className="px-8 py-3 bg-blue-600 text-white rounded-2xl text-xs font-bold shadow-xl hover:bg-blue-700 transition-all">Tải xuống để xem</a>
                                         </div>
                                     )}
                                 </div>
@@ -229,18 +238,18 @@
                     <div className="fixed bottom-0 left-0 right-0 p-6 glass-header border-t border-gray-100 z-50">
                         <div className="max-w-2xl mx-auto space-y-4">
                             {file && (
-                                <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-2xl animate-in border border-blue-100">
+                                <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-2xl border border-blue-100 animate-in">
                                     <span className="text-xs font-bold text-blue-700 truncate flex-1 px-2">{file.name}</span>
                                     <button onClick={() => setFile(null)} className="text-blue-500">✕</button>
                                 </div>
                             )}
                             <div className="flex gap-2 justify-center">
                                 {LABELS.map(l => (
-                                    <button key={l.id} onClick={() => setActiveLabel(l.id)} className={`px-5 py-2 rounded-full text-[10px] font-bold transition-all ${activeLabel === l.id ? 'bg-black text-white shadow-lg scale-105' : 'bg-white text-gray-400 border border-gray-100'}`}>{l.id}</button>
+                                    <button key={l.id} onClick={() => setActiveLabel(l.id)} className={`px-5 py-2 rounded-full text-[10px] font-bold transition-all ${activeLabel === l.id ? 'bg-black text-white shadow-lg' : 'bg-white text-gray-400 border border-gray-100'}`}>{l.id}</button>
                                 ))}
                             </div>
                             <form onSubmit={handleSubmit} className="bg-white shadow-2xl rounded-[2.5rem] p-2 border border-gray-100">
-                                <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={uploading ? "Đang xử lý tải lên..." : "Bạn đang nghĩ gì?"} className="w-full p-5 outline-none resize-none text-sm h-28 bg-transparent" disabled={uploading} />
+                                <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={uploading ? "Đang xử lý tải lên..." : "Hôm nay bạn thế nào?"} className="w-full p-5 outline-none resize-none text-sm h-28 bg-transparent" disabled={uploading} />
                                 <div className="flex items-center justify-between p-2">
                                     <input type="file" className="hidden" ref={fileInputRef} onChange={(e) => setFile(e.target.files[0])} />
                                     <button type="button" onClick={() => fileInputRef.current.click()} className="p-3 text-gray-400 hover:text-blue-600 transition-all text-xl">📎</button>
