@@ -18,10 +18,11 @@
         .neo-card { background: #ffffff; border: 1px solid #f1f5f9; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
         .neo-card:hover { transform: translateY(-3px); box-shadow: 0 12px 20px -5px rgba(0, 0, 0, 0.05); }
         .tab-active { color: #2563eb; position: relative; }
-        .tab-active::after { content: ''; position: absolute; bottom: -1px; left: 0; right: 0; h: 2px; background: #2563eb; border-radius: 10px; }
+        .tab-active::after { content: ''; position: absolute; bottom: -1px; left: 0; right: 0; height: 2px; background: #2563eb; border-radius: 10px; }
         .loader { border: 2px solid #f3f3f3; border-top: 2px solid #3b82f6; border-radius: 50%; width: 16px; height: 16px; animation: spin 0.8s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .modal-overlay { background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(8px); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
     </style>
 </head>
 <body>
@@ -70,20 +71,21 @@
 
             useEffect(() => {
                 if (!user) return;
-                return db.collection("giviso_data").where("userId", "==", user.uid)
+                // Tối ưu Query: Sắp xếp theo timestamp giảm dần trực tiếp từ server
+                return db.collection("giviso_data")
+                    .where("userId", "==", user.uid)
                     .onSnapshot((s) => {
                         const data = s.docs.map(d => ({ id: d.id, ...d.data() }));
+                        // Sort thủ công nếu chưa tạo Index cho Firestore
                         setNotes(data.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)));
                     });
             }, [user]);
 
             const filteredNotes = useMemo(() => {
                 let result = notes;
-                // Lọc theo Tab
                 if (currentTab !== 'all') {
                     result = result.filter(n => n.module === currentTab);
                 }
-                // Lọc theo Tìm kiếm
                 if (searchTerm.trim()) {
                     const s = searchTerm.toLowerCase();
                     result = result.filter(n => 
@@ -107,6 +109,7 @@
                 e.preventDefault();
                 if ((!text.trim() && !file) || !user) return;
                 setUploading(true);
+                
                 let fileUrl = null, fileName = null, fileType = null;
                 try {
                     if (file) {
@@ -122,17 +125,29 @@
                         const result = await response.json();
                         fileUrl = result.url; fileName = file.name; fileType = file.type;
                     }
+                    
                     const now = new Date();
                     const vnDate = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
+                    
+                    // ĐIỀU CHỈNH QUAN TRỌNG: Lưu module dựa trên Tab hiện tại hoặc mặc định 'all'
                     await db.collection("giviso_data").add({
-                        content: text, userId: user.uid, 
-                        module: currentTab === 'all' ? 'baigiang' : currentTab, // Nếu ở tab All thì mặc định lưu vào bài giảng
-                        displayDate: vnDate, fileUrl, fileName, fileType,
+                        content: text, 
+                        userId: user.uid, 
+                        module: currentTab, // Giữ nguyên để hiển thị đúng tab
+                        displayDate: vnDate, 
+                        fileUrl, 
+                        fileName, 
+                        fileType,
                         time: now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
                         timestamp: firebase.firestore.FieldValue.serverTimestamp()
                     });
+                    
                     setText(""); setFile(null);
-                } catch (err) { alert("Lỗi: " + err.message); } finally { setUploading(false); }
+                } catch (err) { 
+                    alert("Lỗi: " + err.message); 
+                } finally { 
+                    setUploading(false); 
+                }
             };
 
             const formatDriveUrl = (url) => {
@@ -149,7 +164,6 @@
 
             return (
                 <div className="max-w-4xl mx-auto min-h-screen px-4 pt-40 pb-72">
-                    {/* TOP NAVIGATION & TABs */}
                     <header className="fixed top-0 left-0 right-0 z-40 glass-nav">
                         <div className="max-w-4xl mx-auto px-4">
                             <div className="flex items-center justify-between h-20">
@@ -170,7 +184,6 @@
                                 </div>
                                 <img src={user.photoURL} className="w-9 h-9 rounded-full border-2 border-white shadow-sm" />
                             </div>
-                            {/* TABBAR */}
                             <div className="flex items-center gap-8 h-14 overflow-x-auto no-scrollbar">
                                 {MODULES.map(m => (
                                     <button 
@@ -186,7 +199,6 @@
                         </div>
                     </header>
 
-                    {/* CONTENT LIST */}
                     <div className="space-y-12">
                         {Object.keys(groupedNotes).length === 0 && (
                             <div className="text-center py-20 text-slate-400 italic text-sm">Chưa có dữ liệu trong mục này</div>
@@ -199,7 +211,7 @@
                                 </div>
                                 <div className="grid gap-6">
                                     {groupedNotes[date].map(note => (
-                                        <div key={note.id} className="neo-card rounded-[2rem] p-6 group animate-in relative">
+                                        <div key={note.id} className="neo-card rounded-[2rem] p-6 group relative">
                                             <div className="flex justify-between items-start mb-4">
                                                 <div className="flex items-center gap-3">
                                                     <span className="text-[10px] font-bold text-slate-300 uppercase">{note.time}</span>
@@ -212,7 +224,6 @@
                                                 </button>
                                             </div>
                                             <p className="text-slate-700 text-[15px] font-medium leading-relaxed whitespace-pre-wrap">{note.content}</p>
-                                            
                                             {note.fileUrl && (
                                                 <div className="mt-5 p-4 bg-slate-50 rounded-2xl flex items-center gap-4 cursor-pointer hover:bg-slate-100 transition-colors border border-slate-100" onClick={() => setSelectedFile(note)}>
                                                     <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-blue-600 shadow-sm border border-slate-100">
@@ -220,7 +231,7 @@
                                                     </div>
                                                     <div className="flex-1 overflow-hidden pr-4">
                                                         <p className="text-[12px] font-bold text-slate-800 truncate mb-1">{note.fileName}</p>
-                                                        <span className="text-[9px] font-black text-blue-500 bg-blue-50 px-2 py-0.5 rounded uppercase tracking-tighter">Quick View</span>
+                                                        <span className="text-[9px] font-black text-blue-500 bg-blue-50 px-2 py-0.5 rounded uppercase tracking-tighter">Xem nhanh</span>
                                                     </div>
                                                     <a href={note.fileUrl} onClick={e => e.stopPropagation()} target="_blank" className="p-2.5 text-slate-400 hover:text-blue-600 bg-white rounded-xl border shadow-sm"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg></a>
                                                 </div>
@@ -232,9 +243,8 @@
                         ))}
                     </div>
 
-                    {/* MODAL VIEW */}
                     {selectedFile && (
-                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 modal-overlay animate-in" onClick={() => setSelectedFile(null)}>
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 modal-overlay" onClick={() => setSelectedFile(null)}>
                             <div className="bg-white w-full max-w-5xl h-[90vh] rounded-[2.5rem] overflow-hidden shadow-2xl relative flex flex-col" onClick={e => e.stopPropagation()}>
                                 <div className="p-6 border-b flex items-center justify-between bg-white">
                                     <h3 className="font-bold text-sm text-slate-800">{selectedFile.fileName}</h3>
@@ -247,11 +257,10 @@
                         </div>
                     )}
 
-                    {/* BOTTOM INPUT BAR */}
                     <div className="fixed bottom-0 left-0 right-0 p-6 glass-nav z-50">
                         <div className="max-w-3xl mx-auto">
                             <form onSubmit={handleSubmit} className="bg-white shadow-2xl rounded-[2.5rem] p-3 border flex flex-col md:flex-row items-center gap-3">
-                                {file && <div className="px-4 py-2 bg-blue-50 rounded-xl text-[10px] font-bold text-blue-600 animate-in">📎 {file.name.slice(0, 15)}...</div>}
+                                {file && <div className="px-4 py-2 bg-blue-50 rounded-xl text-[10px] font-bold text-blue-600">📎 {file.name.slice(0, 15)}...</div>}
                                 <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={`Đang ở mục ${MODULES.find(m=>m.id===currentTab)?.name}...`} className="w-full p-4 outline-none resize-none text-[14px] font-medium h-12 bg-transparent" disabled={uploading} />
                                 <div className="flex items-center gap-2">
                                     <input type="file" className="hidden" ref={fileInputRef} onChange={(e) => setFile(e.target.files[0])} />
@@ -272,5 +281,3 @@
     </script>
 </body>
 </html>
-
-
